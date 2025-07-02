@@ -1,9 +1,9 @@
-name: Detect New Org Members
+name: Detect New Org Members and Create Issues
 
 on:
   schedule:
-    - cron: '*/6 * * * *'  # Runs every 6 minutes
-  workflow_dispatch:
+    - cron: '*/5 * * * *'   # every 5 minutes
+  workflow_dispatch:        # manual trigger available
 
 jobs:
   detect-new-members:
@@ -13,55 +13,47 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get current org members (including private)
-        id: get_members
+      - name: Get current org members
         run: |
           curl -s -H "Authorization: token ${{ secrets.ORG_PAT }}" \
-            https://api.github.com/orgs/DevFlow-Project/members?visibility=all \
+            https://api.github.com/orgs/YOUR_ORG_NAME/members?visibility=all \
             | jq -r '.[].login' | sort > current-members.txt
-          echo " Current members:"
-          cat current-members.txt
 
-      - name: Load previous member list
+      - name: Load previous members list
         run: |
           if [ -f previous-members.txt ]; then
             sort previous-members.txt > previous.txt
           else
-            echo "No previous-members.txt found. Creating empty one."
             touch previous.txt
           fi
 
       - name: Find new members
-        id: compare
+        id: find_new
         run: |
           comm -13 previous.txt current-members.txt > new-members.txt
-          echo "✅ New members detected (if any):"
-          cat new-members.txt || echo "(none)"
-          if [ -s new-members.txt ]; then
-            echo "new_members=$(paste -sd ',' new-members.txt)" >> $GITHUB_OUTPUT
-          else
-            echo "new_members=" >> $GITHUB_OUTPUT
-          fi
+          echo "new_members=$(paste -sd ',' new-members.txt)" >> $GITHUB_OUTPUT
 
       - name: Create issues for new members
-        if: steps.compare.outputs.new_members != ''
+        if: steps.find_new.outputs.new_members != ''
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const newMembersStr = "${{ steps.compare.outputs.new_members }}";
-            const members = newMembersStr.split(',').map(m => m.trim()).filter(Boolean);
-            for (const username of members) {
-              console.log(` Creating welcome issue for ${username}`);
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: ` New Member Joined: @${username}`,
-                body: `Welcome @${username} to **DevFlow-Project**! 🎊\n\nThey’ve just accepted the organization invitation and joined our team.\n\nLet's make sure to help them onboard smoothly! 🤝`,
-              });
+            const newMembersString = "${{ steps.find_new.outputs.new_members }}";
+            const newMembers = newMembersString.split(',');
+            for (const username of newMembers) {
+              const user = username.trim();
+              if (user) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: `🎉 Welcome new member: @${user}`,
+                  body: `Hi @${user}, thanks for accepting the organization invite and joining **${context.repo.owner}**! Welcome aboard! 🚀`
+                });
+              }
             }
 
-      - name: Save current member list as previous
+      - name: Save current members list
         run: |
           mv current-members.txt previous-members.txt
 
@@ -70,5 +62,5 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add previous-members.txt
-          git diff --cached --quiet || git commit -m "Update member list"
-          git push || echo "No changes to push"
+          git commit -m "Update org members list" || echo "No changes"
+          git push || echo "No push needed"
