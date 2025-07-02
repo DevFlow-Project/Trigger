@@ -1,6 +1,5 @@
 name: Detect New Org Members
 
-
 on:
   workflow_dispatch:  # manual trigger
   schedule:
@@ -49,7 +48,8 @@ jobs:
           fi
 
       - name: Debug new_members output
-        run: echo "new_members output: '${{ steps.compare.outputs.new_members }}'"
+        run: |
+          echo "new_members output: '${{ steps.compare.outputs.new_members }}'"
 
       - name: Create issues for new members
         if: steps.compare.outputs.new_members != ''
@@ -60,4 +60,31 @@ jobs:
             const newMembersStr = "${{ steps.compare.outputs.new_members }}";
             console.log("New members string:", newMembersStr);
             if (newMembersStr.trim() === '') {
-              console.lo
+              console.log("No new members to process. Skipping issue creation.");
+              return;
+            }
+            const members = newMembersStr.split(',');
+            for (const username of members) {
+              const user = username.trim();
+              if (user !== '') {
+                console.log(`Creating issue for new member: ${user}`);
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: `New Member Joined: @${user}`,
+                  body: `@${user} has accepted the organization invitation and joined **DevFlow-Project**. Welcome aboard! 🚀`
+                });
+              }
+            }
+
+      - name: Save current member list as previous
+        run: |
+          mv current-members.txt previous-members.txt
+
+      - name: Commit and push updated member list
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add previous-members.txt
+          git diff --cached --quiet || git commit -m "Update member list"
+          git push || echo "Push failed or no changes to push"
