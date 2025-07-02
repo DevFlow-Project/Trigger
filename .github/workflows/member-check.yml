@@ -2,24 +2,24 @@ name: Detect New Org Members
 
 on:
   schedule:
-    - cron: '6 * * * *'  
-  #workflow_dispatch:      # Allow manual trigger for testing
+    - cron: '*/6 * * * *'  # Runs every hour at minute 6
+  workflow_dispatch:      # Optional: allows manual run
 
 jobs:
   detect-new-members:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get current org members
+      - name: Get current org members (including private)
         run: |
           curl -s -H "Authorization: token ${{ secrets.ORG_PAT }}" \
-            https://api.github.com/orgs/DevFlow-Project/members \
+            https://api.github.com/orgs/DevFlow-Project/members?visibility=all \
             | jq -r '.[].login' | sort > current-members.txt
 
-      - name: Load previous list
+      - name: Load previous member list
         run: |
           if [ -f previous-members.txt ]; then
             cat previous-members.txt | sort > previous.txt
@@ -41,15 +41,17 @@ jobs:
           script: |
             const members = "${{ steps.compare.outputs.new_members }}".split(',');
             for (const username of members) {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: ` New Member Joined: @${username}`,
-                body: `@${username} has accepted the org invite and joined. Welcome aboard!`
-              });
+              if (username.trim() !== '') {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: `New Member Joined: @${username}`,
+                  body: `@${username} has accepted the organization invitation and joined **DevFlow-Project**. Welcome aboard! 🚀`
+                });
+              }
             }
 
-      - name: Save current list
+      - name: Save current member list
         run: |
           mv current-members.txt previous-members.txt
 
