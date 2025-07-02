@@ -3,6 +3,7 @@ name: Detect New Org Members
 on:
   schedule:
     - cron: '*/6 * * * *'  # Runs every 6 minutes
+  workflow_dispatch:
 
 jobs:
   detect-new-members:
