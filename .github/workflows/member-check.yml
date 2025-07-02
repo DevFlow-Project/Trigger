@@ -2,7 +2,7 @@ name: Detect New Org Members
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour
+    - cron: '6 * * * *'  
   workflow_dispatch:      # Allow manual trigger for testing
 
 jobs:
