@@ -1,7 +1,6 @@
 name: Detect New Org Members
 
 on:
-  workflow_dispatch:  # manual trigger
   schedule:
     - cron: '*/6 * * * *'  # Runs every 6 minutes
 
@@ -19,37 +18,29 @@ jobs:
           curl -s -H "Authorization: token ${{ secrets.ORG_PAT }}" \
             https://api.github.com/orgs/DevFlow-Project/members?visibility=all \
             | jq -r '.[].login' | sort > current-members.txt
-          echo "Current members:"
+          echo " Current members:"
           cat current-members.txt
 
       - name: Load previous member list
-        id: load_previous
         run: |
           if [ -f previous-members.txt ]; then
             sort previous-members.txt > previous.txt
           else
-            echo "No previous-members.txt found; creating empty previous.txt"
+            echo "No previous-members.txt found. Creating empty one."
             touch previous.txt
           fi
-          echo "Previous members:"
-          cat previous.txt || echo "(empty)"
 
       - name: Find new members
         id: compare
         run: |
           comm -13 previous.txt current-members.txt > new-members.txt
-          echo "New members detected:"
+          echo "✅ New members detected (if any):"
           cat new-members.txt || echo "(none)"
-
           if [ -s new-members.txt ]; then
             echo "new_members=$(paste -sd ',' new-members.txt)" >> $GITHUB_OUTPUT
           else
             echo "new_members=" >> $GITHUB_OUTPUT
           fi
-
-      - name: Debug new_members output
-        run: |
-          echo "new_members output: '${{ steps.compare.outputs.new_members }}'"
 
       - name: Create issues for new members
         if: steps.compare.outputs.new_members != ''
@@ -58,23 +49,15 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const newMembersStr = "${{ steps.compare.outputs.new_members }}";
-            console.log("New members string:", newMembersStr);
-            if (newMembersStr.trim() === '') {
-              console.log("No new members to process. Skipping issue creation.");
-              return;
-            }
-            const members = newMembersStr.split(',');
+            const members = newMembersStr.split(',').map(m => m.trim()).filter(Boolean);
             for (const username of members) {
-              const user = username.trim();
-              if (user !== '') {
-                console.log(`Creating issue for new member: ${user}`);
-                await github.rest.issues.create({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  title: `New Member Joined: @${user}`,
-                  body: `@${user} has accepted the organization invitation and joined **DevFlow-Project**. Welcome aboard! 🚀`
-                });
-              }
+              console.log(` Creating welcome issue for ${username}`);
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: ` New Member Joined: @${username}`,
+                body: `Welcome @${username} to **DevFlow-Project**! 🎊\n\nThey’ve just accepted the organization invitation and joined our team.\n\nLet's make sure to help them onboard smoothly! 🤝`,
+              });
             }
 
       - name: Save current member list as previous
@@ -87,4 +70,4 @@ jobs:
           git config user.email "actions@github.com"
           git add previous-members.txt
           git diff --cached --quiet || git commit -m "Update member list"
-          git push || echo "Push failed or no changes to push"
+          git push || echo "No changes to push"
